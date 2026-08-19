@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Secrets / environment variables
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated project data
+data/bronze/*
+data/silver/*
+data/gold/*
+
+# Airflow local files
+airflow/logs/
+airflow/airflow.db
+airflow/*.pid
+
+# Logs
+*.log
