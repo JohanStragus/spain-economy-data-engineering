@@ -28,6 +28,7 @@ data/gold/*
 airflow/logs/
 airflow/airflow.db
 airflow/*.pid
+airflow/config/
 
 # Logs
 *.log

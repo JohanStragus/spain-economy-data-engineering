@@ -7,6 +7,9 @@ from config.series import SERIES, START_DATE, END_DATE
 # Url principal para las peticiones
 BASE_URL = "https://servicios.ine.es/wstempus/js/ES/DATOS_SERIE"
 
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 # Función para escribir el código de los datos serie que queremos investigar
 def get_series(series_code):
 
@@ -32,7 +35,7 @@ def get_series(series_code):
 def save_json(data, filename):
 
     # Directorio donde guardaremos los datos
-    bronze_dir = Path("data/bronze")
+    bronze_dir = PROJECT_ROOT / "data" / "bronze"
 
     # Por si acaso la carpeta o ruta no existe la creamos, y si existe no pasa nada
     bronze_dir.mkdir(parents=True, exist_ok=True)
@@ -46,14 +49,19 @@ def save_json(data, filename):
         # Convertimos el objeto Python a JSON y lo escribimos en el archivo
         json.dump(data, file, ensure_ascii=False, indent=4)
 
-# Ejecutamos este bloque solo cuando este archivo se ejecuta directamente
-if __name__ == "__main__":
 
-    # Recorremos todo el diccionario de series
+# Función que extrae y guarda todas las series configuradas
+def extract_all_series():
+
+    # Recorremos cada nombre y código del diccionario SERIES
     for name, code in SERIES.items():
 
-        # Obtenemos los datos a partir del código de serie
+        # Pedimos los datos al INE usando el código de serie
         data = get_series(code)
 
-        # Una vez con los datos obtenidos, los guardamos de objeto a JSON en Bronze
+        # Guardamos la respuesta como JSON en Bronze
         save_json(data, f"{name}.json")
+
+# Ejecutamos este bloque solo cuando este archivo se ejecuta directamente
+if __name__ == "__main__":
+    extract_all_series()
