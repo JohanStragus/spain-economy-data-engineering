@@ -23,6 +23,8 @@ Thumbs.db
 data/bronze/*
 data/silver/*
 data/gold/*
+# Mantener los archivos gold CSV en git
+!data/gold/*.csv
 
 # Airflow local files
 airflow/logs/
