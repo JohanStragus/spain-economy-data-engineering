@@ -1,1201 +1,580 @@
-# Spain Economy Data Engineering
+# Economía de España 2015–2026 · Data Engineering Project
 
-Data Engineering project focused on analysing the evolution of the Spanish economy between **2015 and 2026** using official public data.
+<p align="center">
+  <img src="https://img.shields.io/badge/STATUS-FINALIZADO-2E8B57?style=for-the-badge" alt="Status"/>
+  <img src="https://img.shields.io/badge/SOURCE-INE-16324F?style=for-the-badge" alt="INE"/>
+  <img src="https://img.shields.io/badge/LANGUAGE-PYTHON-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python"/>
+  <img src="https://img.shields.io/badge/PROCESSING-PYSPARK-E25A1C?style=for-the-badge&logo=apache-spark&logoColor=white" alt="PySpark"/>
+  <img src="https://img.shields.io/badge/PLATFORM-DATABRICKS-FF3621?style=for-the-badge&logo=databricks&logoColor=white" alt="Databricks"/>
+  <img src="https://img.shields.io/badge/ORCHESTRATION-AIRFLOW-017CEE?style=for-the-badge&logo=apache-airflow&logoColor=white" alt="Airflow"/>
+  <img src="https://img.shields.io/badge/CONTAINERS-DOCKER-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"/>
+  <img src="https://img.shields.io/badge/BI-POWER%20BI-F2C811?style=for-the-badge&logo=powerbi&logoColor=000000" alt="Power BI"/>
+  <img src="https://img.shields.io/badge/ARCHITECTURE-MEDALLION-6B7280?style=for-the-badge" alt="Medallion Architecture"/>
+</p>
 
-The main goal is to answer a simple question:
+## 📌 Descripción
 
-> **Has the Spanish economy really improved for the average citizen?**
+Proyecto end-to-end de **Data Engineering + Business Intelligence** construido para analizar la evolución de la economía española entre **2015 y 2026** a partir de datos oficiales del **Instituto Nacional de Estadística (INE)**.
 
-The project combines economic analysis with a complete Data Engineering workflow using official data from the **Instituto Nacional de Estadística (INE)**.
+La pregunta que guía el proyecto es sencilla:
 
----
+> **¿Vivimos mejor en España que en 2015?**
 
-## Project Questions
+Para responderla no se utiliza un único indicador. El proyecto combina evolución de precios, salarios, PIB real, población, contratación y jornada laboral, construyendo un pipeline automatizado que lleva los datos desde la API del INE hasta un dashboard final en Power BI.
 
-The analysis is divided into four main areas.
+El objetivo no es únicamente obtener gráficos, sino demostrar un flujo completo de ingeniería de datos:
 
-### 1. Economic Production
-
-Indicators:
-
-- Real GDP
-- Population
-- Real GDP per capita index
-
-Main question:
-
-> Is Spain producing more in real terms, and has that improvement also occurred per inhabitant?
-
----
-
-### 2. Employment
-
-Indicators:
-
-- Employed population
-- Unemployment rate
-
-Main question:
-
-> Are more people working and has unemployment decreased over time?
+**extracción → almacenamiento Bronze → transformación Silver → métricas Gold → orquestación → visualización.**
 
 ---
 
-### 3. Job Quality
+## 🎯 Objetivos
 
-Indicators:
-
-- Permanent employees
-- Temporary employees
-- Full-time employment
-- Part-time employment
-
-Main question:
-
-> Has employment growth also been accompanied by more stable and full-time jobs?
-
-Fixed-discontinuous contracts are not analysed separately.
-
-They are already included within permanent employment in the EPA data, and separating them consistently would require EPA microdata or a different methodology based on SEPE registered contracts.
-
-The project will therefore analyse **permanent employment as a whole** without assuming that all permanent employment is continuous throughout the entire year.
+- Extraer automáticamente series económicas y laborales desde la API del INE.
+- Mantener una capa **Bronze** con los datos originales.
+- Limpiar, normalizar y transformar los datos con **PySpark** en Databricks.
+- Construir métricas analíticas en una capa **Gold**.
+- Automatizar el pipeline con **Apache Airflow** ejecutado mediante Docker.
+- Descargar automáticamente las tablas Gold desde Databricks al entorno local.
+- Construir un modelo en estrella en **Power BI**.
+- Analizar si el crecimiento económico se ha trasladado también al ciudadano medio.
 
 ---
 
-### 4. Purchasing Power
+## 🏗️ Arquitectura
 
-Indicators:
-
-- Salary
-- Consumer Price Index (CPI)
-- Real salary
-- Purchasing power
-
-Main question:
-
-> Even if salaries have increased in nominal terms, can workers actually buy more than before?
-
----
-
-## Study Period
-
-The project analyses the period:
-
-**2015–2026**
-
-Special attention will also be given to:
-
-- **2015** as the starting point of the analysis
-- **2019** as the last complete pre-COVID year
-- **2020** as an exceptional pandemic year
-- **2021–2022** as the recovery and high-inflation period
-- **2023–2025** as the most recent complete period
-- **2026** as a partial year using the latest available data
-
-The complete time series will be analysed instead of drawing conclusions from only two isolated years.
-
----
-
-## Data Source
-
-The main source is official public data from the:
-
-**Instituto Nacional de Estadística (INE)**
-
-The data will be retrieved directly through the official INE JSON API.
-
-Official API documentation:
-
-https://www.ine.es/dyngs/DAB/index.htm?cid=1099
-
----
-
-## INE Data Hierarchy
-
-The INE data was explored using the following hierarchy:
-
-```text
-Category
-   ↓
-Operation
-   ↓
-Table
-   ↓
-Series
-   ↓
-Observations
+```mermaid
+flowchart LR
+    A[INE API] --> B[Python Extraction]
+    B --> C[Local Bronze JSON]
+    C --> D[Databricks Volume Bronze]
+    D --> E[PySpark Silver]
+    E --> F[Gold Delta Tables]
+    F --> G[Gold CSV Volume]
+    G --> H[Airflow Download]
+    H --> I[Local Gold CSV]
+    I --> J[Power BI]
 ```
 
-### Operation
-
-A specific statistical study.
-
-Examples:
-
-- Encuesta de Población Activa
-- Índice de Precios de Consumo
-- Encuesta Trimestral de Coste Laboral
-
-### Table
-
-A collection of related statistical series inside an operation.
-
-### Series
-
-A specific indicator measured over time.
-
-Example:
+### Flujo automatizado en Airflow
 
 ```text
-EPA400155
-→ Permanent salaried employees
-```
-
-### Observation
-
-The value of a series for a particular period.
-
-Example:
-
-```text
-2015 Q1 → 10997.3
-```
-
-If the EPA scale is expressed in thousands:
-
-```text
-10997.3
-=
-10,997,300 persons
-≈
-11 million persons
-```
-
----
-
-## API Exploration Strategy
-
-During the exploration phase, complete tables were queried because the exact series codes were not yet known.
-
-Example:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_TABLA/65132?date=20150101:20261231&tip=A
-```
-
-Once the correct series were identified, the production pipeline can query each series directly.
-
-Production pattern:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_SERIE/{SERIES_CODE}?date=20150101:20261231&tip=A
-```
-
-This avoids downloading every series contained in a table when only one specific indicator is needed.
-
----
-
-## Main API Endpoints
-
-### Available Operations
-
-```text
-https://servicios.ine.es/wstempus/js/ES/OPERACIONES_DISPONIBLES
-```
-
-Used to discover statistical operations and their `Cod_IOE`.
-
----
-
-### Tables of an Operation
-
-```text
-https://servicios.ine.es/wstempus/js/ES/TABLAS_OPERACION/{IOE}?det=2&tip=A
-```
-
-Example:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/TABLAS_OPERACION/IOE30138?det=2&tip=A
-```
-
-Used to discover the tables contained inside an operation.
-
----
-
-### Data from a Table
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_TABLA/{TABLE_ID}?date=20150101:20261231&tip=A
-```
-
-Used mainly during exploration.
-
----
-
-### Data from a Series
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_SERIE/{SERIES_CODE}?date=20150101:20261231&tip=A
-```
-
-This will be the preferred production endpoint.
-
----
-
-## INE Series
-
-| Indicator | Operation | Table | Series | Unit | Frequency |
-|---|---|---|---|---|---|
-| Real GDP | `IOE30024` | `67822` | `CNTR6652` | Index | Quarterly |
-| Population | `IOE30282` | `56934` + `59583` | `ECP320` | Persons | Historical / Quarterly |
-| Employed population | `IOE30308` | `65109` | `EPA387796` | Thousands of persons | Quarterly |
-| Unemployment rate | `IOE30308` | `65219` | `EPA423474` | % | Quarterly |
-| Permanent employees | `IOE30308` | `65132` | `EPA400155` | Thousands of persons | Quarterly |
-| Temporary employees | `IOE30308` | `65132` | `EPA400159` | Thousands of persons | Quarterly |
-| Full-time employment | `IOE30308` | `65148` | `EPA404360` | Thousands of persons | Quarterly |
-| Part-time employment | `IOE30308` | `65148` | `EPA404362` | Thousands of persons | Quarterly |
-| Salary | `IOE30187` | `6038` | `ETCL1527` | Euros | Quarterly |
-| CPI | `IOE30138` | `24077` | `IPC290751` | Index, base 2025 = 100 | Monthly |
-
----
-
-## Series Configuration
-
-The project will store the official INE series codes using readable internal aliases.
-
-Example:
-
-```python
-SERIES = {
-    "gdp_real": "CNTR6652",
-    "population": "ECP320",
-    "employed": "EPA387796",
-    "unemployment_rate": "EPA423474",
-    "indefinite": "EPA400155",
-    "temporary": "EPA400159",
-    "full_time": "EPA404360",
-    "part_time": "EPA404362",
-    "salary": "ETCL1527",
-    "cpi": "IPC290751",
-}
-```
-
-The aliases are internal project names.
-
-For example:
-
-```text
-gdp_real
-```
-
-is only a readable name used by the project.
-
-The INE identifies that series through:
-
-```text
-CNTR6652
-```
-
-The dictionary also allows the extraction process to iterate through all series automatically instead of writing each request manually.
-
----
-
-## Reference URLs
-
-### Real GDP
-
-Table:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_TABLA/67822?date=20150101:20261231&tip=A
-```
-
-Series:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_SERIE/CNTR6652?date=20150101:20261231&tip=A
-```
-
----
-
-### Population
-
-Historical table:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_TABLA/56934?date=20150101:20250331&tip=A
-```
-
-Recent continuation:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_TABLA/59583?date=20250401:20261231&tip=A
-```
-
-Series code:
-
-```text
-ECP320
-```
-
-Before closing the final extractor, it must be verified whether:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_SERIE/ECP320?date=20150101:20261231&tip=A
-```
-
-returns the complete period continuously.
-
-If not, the two population tables will be extracted separately and concatenated.
-
----
-
-### Employed Population
-
-Table:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_TABLA/65109?date=20150101:20261231&tip=A
-```
-
-Series:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_SERIE/EPA387796?date=20150101:20261231&tip=A
-```
-
----
-
-### Unemployment Rate
-
-Table:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_TABLA/65219?date=20150101:20261231&tip=A
-```
-
-Series:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_SERIE/EPA423474?date=20150101:20261231&tip=A
-```
-
----
-
-### Permanent and Temporary Employees
-
-Table:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_TABLA/65132?date=20150101:20261231&tip=A
-```
-
-Permanent employees:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_SERIE/EPA400155?date=20150101:20261231&tip=A
-```
-
-Temporary employees:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_SERIE/EPA400159?date=20150101:20261231&tip=A
-```
-
----
-
-### Full-Time and Part-Time Employment
-
-Table:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_TABLA/65148?date=20150101:20261231&tip=A
-```
-
-Full-time:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_SERIE/EPA404360?date=20150101:20261231&tip=A
-```
-
-Part-time:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_SERIE/EPA404362?date=20150101:20261231&tip=A
-```
-
----
-
-### Salary
-
-Table:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_TABLA/6038?date=20150101:20261231&tip=A
-```
-
-Series:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_SERIE/ETCL1527?date=20150101:20261231&tip=A
-```
-
----
-
-### CPI
-
-Table:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_TABLA/24077?date=20150101:20261231&tip=A
-```
-
-Series:
-
-```text
-https://servicios.ine.es/wstempus/js/ES/DATOS_SERIE/IPC290751?date=20150101:20261231&tip=A
-```
-
----
-
-## Important Methodological Decisions
-
-### Real GDP Instead of Nominal GDP
-
-The project uses real GDP because nominal GDP can increase simply because prices have increased.
-
-The selected series:
-
-```text
-CNTR6652
-```
-
-represents GDP at market prices using chain-linked volume indices adjusted for seasonality and calendar effects.
-
-The objective is to analyse changes in actual production rather than changes caused only by prices.
-
----
-
-## Real GDP Per Capita
-
-The GDP series used in the project is an **index**, not GDP expressed directly in euros.
-
-Therefore, this would be incorrect:
-
-```text
-GDP index / population
-=
-GDP per capita in euros
-```
-
-The result would not represent euros per inhabitant.
-
-Instead, the project will construct a relative real GDP per capita index.
-
-Conceptually:
-
-```text
-Real GDP growth
+extract_ine_data
         ↓
-compared with
+upload_bronze_to_databricks
         ↓
-Population growth
+run_bronze_to_silver
         ↓
-Real GDP per capita index
-```
-
-A possible methodology is:
-
-```text
-GDP_per_capita_index_t
-=
-(
-    GDP_real_index_t / GDP_real_index_base
-)
-/
-(
-    Population_t / Population_base
-)
-× 100
-```
-
-The final base period and the treatment of missing historical quarterly population observations must still be validated before implementation.
-
----
-
-## Labour Market Methodology
-
-Permanent and temporary employment refer to **salaried workers**.
-
-Full-time and part-time employment refer to **all employed workers**.
-
-Therefore, their denominators must remain separate.
-
-### Permanent Employment Percentage
-
-```text
-Permanent %
-=
-Permanent
-/
-(Permanent + Temporary)
-× 100
-```
-
-### Temporary Employment Percentage
-
-```text
-Temporary %
-=
-Temporary
-/
-(Permanent + Temporary)
-× 100
-```
-
-### Full-Time Employment Percentage
-
-```text
-Full-time %
-=
-Full-time
-/
-(Full-time + Part-time)
-× 100
-```
-
-### Part-Time Employment Percentage
-
-```text
-Part-time %
-=
-Part-time
-/
-(Full-time + Part-time)
-× 100
-```
-
-The two groups must not be mixed because they represent different populations.
-
----
-
-## Fixed-Discontinuous Contracts
-
-Fixed-discontinuous contracts were investigated but removed from the main project scope.
-
-The EPA considers them part of permanent employment.
-
-Conceptually:
-
-```text
-Permanent employees
-│
-├── Continuous permanent employees
-└── Fixed-discontinuous employees
-```
-
-Therefore, the project does not lose those workers by excluding a separate fixed-discontinuous indicator.
-
-They remain included inside:
-
-```text
-EPA400155
-```
-
-The project will simply avoid claiming that all permanent employees work continuously throughout the full year.
-
----
-
-## SEPE Exploration
-
-SEPE data was briefly investigated as a possible source for fixed-discontinuous contracts.
-
-Historical Excel files contained registered contract statistics, including the category:
-
-```text
-FIJOS DISCONTINUOS
-```
-
-However, SEPE registered contracts represent a different concept from EPA employed persons.
-
-Conceptually:
-
-```text
-EPA
-→ people currently employed
-→ stock
-
-SEPE
-→ contracts registered
-→ flow
-```
-
-One worker can potentially generate more than one registered contract.
-
-Using SEPE for only one indicator would therefore add:
-
-- another methodology
-- historical XLS processing
-- additional extraction logic
-- potential comparability problems
-- significant complexity for limited analytical benefit
-
-SEPE was therefore removed from the main pipeline.
-
----
-
-## Salary
-
-The selected salary series is:
-
-```text
-ETCL1527
-```
-
-It represents:
-
-```text
-Total National
-Both working-time types
-Industry + Construction + Services
-Total salary cost
-Euros
-```
-
-The project intentionally uses **salary cost** rather than total labour cost.
-
-Total labour cost would also include employer contributions and other costs that do not represent salary received by the worker.
-
----
-
-## CPI
-
-The selected CPI series is:
-
-```text
-IPC290751
-```
-
-It represents:
-
-```text
-National
-General Index
-Index
-Base 2025 = 100
-```
-
-The CPI value itself is **not an inflation percentage**.
-
-Example:
-
-```text
-CPI = 103
-```
-
-does not mean:
-
-```text
-103% inflation
-```
-
-It means that the price level is approximately:
-
-```text
-3% above the base level 100
-```
-
-The index is more useful than storing only an inflation rate because it allows comparisons between any two periods and can be used to deflate nominal salary values.
-
----
-
-## CPI Monthly to Quarterly Transformation
-
-Most project indicators are quarterly.
-
-The CPI is monthly.
-
-To align the CPI with quarterly salary data, a quarterly arithmetic average will be calculated.
-
-```text
-Q1 = average(January, February, March)
-
-Q2 = average(April, May, June)
-
-Q3 = average(July, August, September)
-
-Q4 = average(October, November, December)
-```
-
-Example:
-
-```text
-January CPI  = 100
-February CPI = 101
-March CPI    = 102
-
-Q1 CPI
-=
-(100 + 101 + 102) / 3
-=
-101
-```
-
-This transformation allows salary and CPI data to share the same quarterly frequency.
-
----
-
-## Real Salary and Purchasing Power
-
-Nominal salary alone does not indicate whether workers can actually buy more goods and services.
-
-A salary can increase while prices increase even faster.
-
-Using CPI base 2025 = 100:
-
-```text
-Real salary
-=
-Nominal salary × 100 / Quarterly CPI
-```
-
-This expresses salary approximately in constant 2025-price terms.
-
-Interpretation:
-
-```text
-Nominal salary ↑
-CPI ↑ faster
+run_silver_to_gold
         ↓
-Real salary ↓
+run_export_gold
+        ↓
+download_gold_to_local
 ```
 
-The result will be used as an approximation of salary purchasing power.
+El DAG está programado para ejecutarse diariamente a las **00:00**.
 
-It should not be interpreted as a complete measure of citizen welfare.
+> [!NOTE]
+> La orquestación es local: el equipo, Docker Desktop y los contenedores de Airflow deben estar encendidos para que la ejecución programada tenga lugar.
 
 ---
 
-## Extraction Strategy
+## 🛠️ Tecnologías
 
-The project will not make one API request for every month or quarter.
-
-Each series request retrieves all observations available inside the requested date range.
-
-Conceptually:
-
-```text
-1 series
-   ↓
-1 API request
-   ↓
-all observations from 2015 to 2026
-```
-
-The project currently requires approximately:
-
-```text
-10 main INE series
-≈
-10 API requests per extraction run
-```
-
-This is significantly cleaner than repeatedly querying full tables.
+| Tecnología | Uso en el proyecto |
+|---|---|
+| **Python** | Extracción desde la API del INE y lógica auxiliar |
+| **Requests / JSON** | Consumo y almacenamiento de datos crudos |
+| **Databricks** | Entorno de procesamiento y almacenamiento |
+| **PySpark** | Limpieza, transformación, joins, ventanas y métricas |
+| **Delta Tables** | Persistencia de las capas Silver y Gold |
+| **Apache Airflow** | Orquestación end-to-end |
+| **Docker / Docker Compose** | Ejecución local de Airflow |
+| **Power BI** | Modelo analítico y visualización |
+| **Git / GitHub** | Control de versiones y portfolio |
 
 ---
 
-## Extraction Configuration
+## 📊 Datos utilizados
 
-Example configuration:
+Los datos proceden de la **API oficial del Instituto Nacional de Estadística (INE)**.
 
-```python
-SERIES = {
-    "gdp_real": "CNTR6652",
-    "population": "ECP320",
-    "employed": "EPA387796",
-    "unemployment_rate": "EPA423474",
-    "indefinite": "EPA400155",
-    "temporary": "EPA400159",
-    "full_time": "EPA404360",
-    "part_time": "EPA404362",
-    "salary": "ETCL1527",
-    "cpi": "IPC290751",
-}
-```
+| Indicador | Serie INE | Uso |
+|---|---:|---|
+| PIB real | `CNTR6652` | Evolución de la producción real |
+| Población | `ECP320` | Contexto demográfico y PIB real per cápita |
+| Ocupados | `EPA387796` | Serie laboral extraída |
+| Tasa de desempleo | `EPA423474` | Serie laboral extraída |
+| Asalariados indefinidos | `EPA400155` | Contratación |
+| Asalariados temporales | `EPA400159` | Contratación |
+| Jornada completa | `EPA404360` | Tipo de jornada |
+| Jornada parcial | `EPA404362` | Tipo de jornada |
+| Salario | `ETCL1527` | Salario nominal y salario real |
+| IPC general | `IPC290751` | Evolución de precios y deflactación salarial |
 
-A future extraction process can iterate through this dictionary:
+El periodo configurado para la extracción es **2015–2026**.
 
-```python
-for name, code in SERIES.items():
-    ...
-```
-
-Conceptually:
-
-```text
-name = "gdp_real"
-code = "CNTR6652"
-```
-
-Then:
-
-```text
-name = "population"
-code = "ECP320"
-```
-
-and so on.
+> [!IMPORTANT]
+> Algunas series de 2026 todavía contienen información parcial. Las comparaciones con 2026 deben interpretarse teniendo en cuenta la disponibilidad de cada indicador.
 
 ---
 
-## Planned Extraction Pattern
+## 🥉🥈🥇 Arquitectura Medallion
 
-```python
-import requests
+### Bronze
 
-BASE_URL = "https://servicios.ine.es/wstempus/js/ES/DATOS_SERIE"
-
-SERIES = {
-    "gdp_real": "CNTR6652",
-    "population": "ECP320",
-    "employed": "EPA387796",
-    "unemployment_rate": "EPA423474",
-    "indefinite": "EPA400155",
-    "temporary": "EPA400159",
-    "full_time": "EPA404360",
-    "part_time": "EPA404362",
-    "salary": "ETCL1527",
-    "cpi": "IPC290751",
-}
-
-
-def get_series(series_code):
-    url = f"{BASE_URL}/{series_code}"
-
-    params = {
-        "date": "20150101:20261231",
-        "tip": "A",
-    }
-
-    response = requests.get(
-        url,
-        params=params,
-        timeout=30,
-    )
-
-    response.raise_for_status()
-
-    return response.json()
-```
-
-The first implementation will initially test only one series before generalising the extractor.
-
----
-
-## Data Engineering Architecture
-
-The planned architecture is:
+Datos originales obtenidos directamente de la API del INE en formato JSON.
 
 ```text
-INE API
-   |
-   v
-Python Extraction
-   |
-   v
-Apache Airflow
-   |
-   v
-Bronze Layer
-Raw JSON
-   |
-   v
-Databricks
-   |
-   v
-Apache Spark / PySpark
-   |
-   +--> Schema normalization
-   +--> Date transformations
-   +--> Unit normalization
-   +--> CPI monthly → quarterly
-   +--> Labour market percentages
-   +--> Real salary
-   +--> Real GDP per capita index
-   |
-   v
-Silver Layer
-   |
-   v
-Gold Layer
-   |
-   v
-Power BI
-   |
-   v
-Economic Analysis
-   |
-   v
-Final Conclusions
-```
-
----
-
-## Data Layers
-
-### Bronze Layer
-
-Contains raw data exactly as returned by the source.
-
-Example:
-
-```text
-INE API
-   ↓
-JSON
-   ↓
 data/bronze/
 ```
 
-No economic transformations should be applied in Bronze.
+Los archivos también se cargan a un Databricks Volume:
 
-The original source structure should be preserved whenever possible.
+```text
+/Volumes/workspace/economia_espana/bronze
+```
+
+La capa Bronze conserva la información recibida sin aplicar transformaciones analíticas.
+
+### Silver
+
+Transformación con PySpark:
+
+- explosión y normalización de estructuras JSON;
+- extracción de `year` y `quarter`;
+- tratamiento de nulos;
+- conversión del IPC mensual a frecuencia trimestral mediante media;
+- adaptación de población a frecuencia trimestral;
+- interpolación de observaciones históricas de población;
+- normalización de las diferentes series;
+- persistencia como tablas Delta.
+
+Tablas Silver principales:
+
+```text
+cpi_silver
+employed_silver
+full_time_silver
+gdp_real_silver
+indefinite_silver
+part_time_silver
+population_silver
+salary_silver
+temporary_silver
+unemployment_rate_silver
+```
+
+### Gold
+
+La capa Gold combina las series Silver y genera métricas preparadas para análisis.
+
+```text
+employment_contract_gold
+work_schedule_gold
+purchasing_power_gold
+population_quarterly_gold
+gdp_per_capita_gold
+```
+
+Estas tablas se exportan automáticamente a CSV y Airflow las descarga a:
+
+```text
+data/gold/
+```
 
 ---
 
-### Silver Layer
+## 🧮 Métricas principales
 
-Contains cleaned and standardized data.
+### Salario real — base de precios 2025
 
-Expected transformations include:
+El salario nominal indica los euros cobrados en cada periodo, pero no cuánto pueden comprar esos euros.
 
-- Normalizing dates
-- Creating year and quarter fields
-- Standardizing schemas
-- Handling data types
-- Converting thousands of persons when required
-- Converting monthly CPI to quarterly CPI
-- Validating missing observations
-- Preparing datasets for joins
-
-Example:
+Para hacer comparables los salarios a lo largo del tiempo se utiliza el IPC:
 
 ```text
-Raw EPA JSON
-   ↓
-Clean schema
-   ↓
+salario_real_base_2025 =
+salario_nominal × (100 / IPC_periodo)
+```
+
+Con `IPC 2025 = 100`.
+
+El resultado expresa cada salario utilizando el **nivel de precios de 2025**.
+
+---
+
+### PIB real per cápita — índice base 2015 T1 = 100
+
+La serie `CNTR6652` es un **índice de volumen de PIB real**, no una cantidad de euros.
+
+Por ello no se divide directamente entre población para obtener `€/habitante`.
+
+Se construye un índice relativo:
+
+```text
+PIB real per cápita =
+(PIB real / PIB real base 2015 T1)
+────────────────────────────────── × 100
+(Población / Población base 2015 T1)
+```
+
+Interpretación:
+
+```text
+100  → mismo nivel que 2015 T1
+110  → aproximadamente +10 % de producción real por habitante
+90   → aproximadamente -10 % de producción real por habitante
+```
+
+Este indicador **no mide salario, renta individual ni productividad por hora trabajada**. Mide la evolución de la producción real media por habitante.
+
+---
+
+### Contratación
+
+```text
+% indefinidos =
+indefinidos / (indefinidos + temporales) × 100
+
+% temporales =
+temporales / (indefinidos + temporales) × 100
+```
+
+---
+
+### Jornada laboral
+
+```text
+% jornada completa =
+jornada completa / (completa + parcial) × 100
+
+% jornada parcial =
+jornada parcial / (completa + parcial) × 100
+```
+
+---
+
+## 👥 Tratamiento de la población
+
+La población no presentaba la misma frecuencia en todo el periodo.
+
+En los años históricos existían observaciones semestrales, mientras que las métricas finales del proyecto trabajan por trimestre.
+
+Para mantener una serie trimestral se utilizaron ventanas de Spark para localizar la observación anterior y posterior:
+
+```text
+previous_population
+next_population
+```
+
+Cuando faltaba un trimestre intermedio:
+
+```text
+population_quarterly =
+(previous_population + next_population) / 2
+```
+
+Cada registro conserva además el origen del dato:
+
+```text
+observed
+interpolated
+```
+
+---
+
+## 📈 Dashboard de Power BI
+
+El dashboard final está dividido en tres páginas.
+
+### 1. Resumen General
+
+Vista rápida del trimestre seleccionado:
+
+- salario real;
+- PIB real per cápita;
+- población;
+- porcentaje de jornada completa;
+- porcentaje de contratos indefinidos.
+
+<p align="center">
+  <img src="docs/images/powerbi_resumen_general.png" alt="Resumen General Power BI" width="900"/>
+</p>
+
+### 2. Economía
+
+Responde principalmente a tres preguntas:
+
+- ¿Cómo han evolucionado salario nominal y salario real?
+- ¿Cómo han evolucionado los precios?
+- ¿Cómo han evolucionado PIB real y producción real por habitante?
+
+<p align="center">
+  <img src="docs/images/powerbi_economia.png" alt="Economía Power BI" width="900"/>
+</p>
+
+### 3. Mercado laboral
+
+Analiza:
+
+- peso de asalariados indefinidos y temporales;
+- jornada completa frente a jornada parcial;
+- evolución absoluta de asalariados indefinidos y temporales.
+
+<p align="center">
+  <img src="docs/images/powerbi_mercado_laboral.png" alt="Mercado Laboral Power BI" width="900"/>
+</p>
+
+El archivo completo de Power BI está disponible en:
+
+```text
+powerbi/españa_graficos.pbix
+```
+
+Las capturas permiten consultar el resultado sin necesidad de instalar Power BI Desktop.
+
+---
+
+## 🔎 Principales conclusiones
+
+### 1. España produce claramente más que en 2015
+
+El PIB real mantiene una tendencia ascendente a largo plazo, con una caída excepcional en 2020 coincidiendo con la pandemia de COVID-19 y una recuperación posterior.
+
+Comparando **2015 T1 con 2026 T2**, el índice de PIB real pasa aproximadamente de `100,03` a `126,64`.
+
+Eso equivale a un crecimiento real cercano al **26,6 %** respecto al inicio del análisis.
+
+En términos sencillos:
+
+> **España produce hoy bastante más cantidad de bienes y servicios que en 2015, descontando el efecto de los precios.**
+
+---
+
+### 2. También producimos más por habitante, pero el avance es menor
+
+El índice construido de PIB real per cápita pasa de `100` en 2015 T1 a aproximadamente `118,27` en 2026 T2.
+
+Esto supone cerca de un **18,3 % más de producción real por habitante** que al comienzo del periodo.
+
+Por tanto, el crecimiento del país **no se explica solamente porque haya más población**: también ha aumentado la producción real media por persona.
+
+Sin embargo, la producción total ha crecido más que la producción por habitante.
+
+```text
+PIB real total:       ≈ +26,6 %
+PIB real per cápita:  ≈ +18,3 %
+```
+
+En lenguaje cotidiano:
+
+> **El país se ha hecho económicamente más grande y cada habitante representa de media más producción que en 2015, pero el crecimiento por persona ha sido bastante menor que el crecimiento total.**
+
+Si en un periodo el PIB real sube mientras el PIB real per cápita baja, la interpretación es diferente: la economía total produce más, pero la población está creciendo a un ritmo suficiente para que la producción media por habitante disminuya.
+
+---
+
+### 3. Los salarios han subido mucho en euros, pero mucho menos en poder de compra
+
+En 2015 T1:
+
+```text
+Salario nominal:             1.831,70 €
+Salario real a precios 2025: 2.345,79 €
+```
+
+En 2026 T1:
+
+```text
+Salario nominal:             2.403,80 €
+Salario real a precios 2025: 2.367,99 €
+```
+
+Entre ambos periodos:
+
+```text
+Salario nominal: ≈ +31,2 %
+Salario real:    ≈ +0,9 %
+```
+
+Esta diferencia es una de las conclusiones más importantes del proyecto.
+
+> **Hoy se cobran muchos más euros que en 2015, pero una gran parte de esa subida ha sido absorbida por el aumento de los precios.**
+
+Por tanto, observar únicamente el salario nominal puede dar una impresión exagerada de mejora.
+
+El salario real aproxima mejor el **poder adquisitivo salarial**, aunque no permite afirmar por sí solo que la calidad de vida general haya mejorado o empeorado. Vivienda, patrimonio, impuestos, estructura familiar o consumo individual quedan fuera de esta métrica.
+
+---
+
+### 4. Los precios aceleran especialmente a partir de 2021
+
+El IPC muestra una evolución relativamente contenida durante la primera parte del periodo y una subida mucho más intensa a partir de 2021.
+
+Esto ayuda a explicar por qué las subidas del salario nominal no se convierten automáticamente en una mejora equivalente del salario real.
+
+En términos simples:
+
+> **Cobrar más no significa necesariamente poder comprar más si los precios también han aumentado.**
+
+---
+
+### 5. Los contratos indefinidos ganan peso frente a los temporales
+
+En 2015 T1, los contratos indefinidos representaban aproximadamente el **76,4 %** del conjunto analizado.
+
+En los últimos años del periodo su peso se sitúa alrededor del **85 %**, mientras que la temporalidad pierde peso.
+
+También se observa un aumento claro del número absoluto de asalariados clasificados como indefinidos.
+
+Sin embargo, hay una limitación importante:
+
+> La categoría de **indefinidos** utilizada por el INE agrupa diferentes modalidades contractuales.
+
+Por ello, este proyecto puede afirmar que ha aumentado su peso estadístico, pero **no que todos esos contratos tengan la misma estabilidad, duración efectiva o calidad laboral**.
+
+---
+
+### 6. La estructura de jornada laboral cambia poco
+
+La jornada completa sigue siendo claramente mayoritaria.
+
+```text
+2015:
+Jornada completa → 83,75 %
+Jornada parcial  → 16,25 %
+
+2025:
+Jornada completa → 86,32 %
+Jornada parcial  → 13,68 %
+```
+
+Existe una mejora hacia la jornada completa de aproximadamente **2,6 puntos porcentuales**, pero no se observa una transformación radical de la estructura laboral.
+
+La distribución se mantiene bastante estable durante todo el periodo.
+
+---
+
+## 🧭 Entonces, ¿vivimos mejor que en 2015?
+
+Si hay que responder de forma clara:
+
+> **España ha mejorado como economía desde 2015, pero esa mejora ha llegado con mucha menos fuerza al poder adquisitivo salarial.**
+
+El país:
+
+- produce bastante más en términos reales;
+- también produce más por habitante;
+- tiene un mayor peso de asalariados clasificados como indefinidos;
+- mantiene una ligera mejora en el peso de la jornada completa.
+
+Pero al mismo tiempo:
+
+- los precios han aumentado con fuerza;
+- el salario nominal ha crecido alrededor de un 31 % entre 2015 T1 y 2026 T1;
+- al expresar ambos salarios con el mismo nivel de precios, el salario real apenas cambia alrededor de un 1 % entre esos dos periodos.
+
+La conclusión principal del análisis es:
+
+> **España es hoy una economía más grande y produce más por habitante, pero el bolsillo del asalariado no ha mejorado en la misma proporción.**
+
+Por tanto, si la pregunta se centra en si **un salario permite comprar claramente más que en 2015**, los datos de este proyecto no muestran una mejora comparable al crecimiento que observamos en el PIB o en el salario nominal.
+
+---
+
+## ⭐ Limitaciones del análisis
+
+Este proyecto pretende responder una pregunta amplia utilizando indicadores concretos. Existen límites que deben tenerse en cuenta:
+
+- el PIB per cápita es una media y no describe cómo se distribuye la renta;
+- PIB per cápita no equivale a productividad laboral;
+- el IPC general representa una cesta media y no refleja exactamente el gasto de cada hogar;
+- vivienda y alquiler pueden evolucionar de forma diferente a la cesta general;
+- salario real no equivale por sí solo a calidad de vida;
+- la categoría de contratos indefinidos agrupa diferentes modalidades;
+- no se analizan impuestos, patrimonio, desigualdad o renta disponible;
+- algunas series de 2026 todavía son parciales;
+- parte de la población histórica trimestral ha sido interpolada debido a la frecuencia original de la serie.
+
+Estas limitaciones son importantes para no extraer conclusiones que los datos no pueden sostener.
+
+---
+
+## 🧩 Modelo de Power BI
+
+Se creó una dimensión temporal común:
+
+```text
+DimPeriod
+```
+
+con:
+
+```text
+period_key
 year
 quarter
-value
-indicator
+date
 ```
+
+Las tablas Gold se conectan mediante relaciones:
+
+```text
+DimPeriod (1) ───── (*) Gold
+```
+
+con filtrado en dirección simple desde la dimensión hacia las tablas de hechos.
+
+Este modelo evita relaciones directas entre las tablas Gold y permite que una misma selección temporal filtre todas las métricas de forma consistente.
 
 ---
 
-### Gold Layer
-
-Contains analysis-ready datasets and derived indicators.
-
-Possible Gold datasets include:
-
-- Real GDP evolution
-- Real GDP per capita index
-- Employment evolution
-- Unemployment evolution
-- Permanent vs temporary employment
-- Full-time vs part-time employment
-- Salary evolution
-- Real salary
-- Purchasing power evolution
-
-These datasets will be prepared for Power BI and final analysis.
-
----
-
-## Technology Stack
-
-### Programming
-
-- Python 3.12
-
-### Data Extraction
-
-- Requests
-- INE JSON API
-
-### Data Exploration and Validation
-
-- Pandas
-- Jupyter / IPython Kernel
-
-### Testing
-
-- Pytest
-
-### Orchestration
-
-- Apache Airflow
-
-### Containers
-
-- Docker
-
-### Data Platform
-
-- Databricks
-
-### Distributed Processing
-
-- Apache Spark
-- PySpark
-
-### Visualization
-
-- Power BI
-
-### Development Tools
-
-- Conda
-- VS Code
-- Git
-- GitHub
-
----
-
-## Local Development Environment
-
-A dedicated Conda environment has been created for the project.
-
-```text
-Environment name: economia
-Python version: 3.12.13
-```
-
-Initial dependencies installed:
-
-```text
-requests
-pandas
-pytest
-ipykernel
-```
-
-The environment is isolated from the other local Conda environments.
-
-Current known Conda environments include:
-
-```text
-base
-py314
-economia
-```
-
-The `economia` environment is the one used for this project.
-
----
-
-## VS Code Environment
-
-VS Code is configured to use the Conda environment:
-
-```text
-economia
-```
-
-Interpreter:
-
-```text
-Python 3.12.13
-```
-
-The project also contains:
-
-```text
-.vscode/settings.json
-```
-
-which stores project-specific VS Code environment preferences.
-
-The environment itself is not stored inside `.vscode`.
-
-The real Conda environment exists externally in the local Anaconda installation.
-
-Conceptually:
-
-```text
-Conda environment
-C:\Users\Johan\anaconda3\envs\economia
-        ↓
-Python + installed packages
-
-
-Project folder
-spain-economy-data-engineering/
-        ↓
-.vscode/
-        ↓
-VS Code project configuration
-```
-
----
-
-## Airflow Strategy
-
-Apache Airflow will **not** be installed directly inside the `economia` Conda environment.
-
-It will be added later using Docker.
-
-Planned architecture:
-
-```text
-Windows
-│
-├── VS Code
-│
-├── Conda
-│   └── economia
-│       └── Python extraction code
-│
-└── Docker Desktop
-    └── Airflow containers
-```
-
-This keeps orchestration infrastructure isolated from the local Python development environment.
-
-Airflow will be introduced only after the basic INE extractor works correctly.
-
----
-
-## Project Structure
+## 📁 Estructura del repositorio
 
 ```text
 spain-economy-data-engineering/
 │
-├── .vscode/
+├── airflow/
+│   ├── dags/
+│   │   └── economia_espana_dag.py
+│   └── docker-compose.yaml
 │
 ├── config/
-│
-├── src/
-│   ├── extraction/
-│   ├── transformations/
-│   └── utils/
+│   └── series.py
 │
 ├── data/
 │   ├── bronze/
-│   ├── silver/
 │   └── gold/
-│
-├── airflow/
-│   └── dags/
+│       ├── employment_contract_gold.csv
+│       ├── gdp_per_capita_gold.csv
+│       ├── population_quarterly_gold.csv
+│       ├── purchasing_power_gold.csv
+│       └── work_schedule_gold.csv
 │
 ├── databricks/
 │   └── notebooks/
-│
-├── tests/
+│       ├── 01_bronze_to_silver.py
+│       ├── 02_silver_to_gold.py
+│       └── 03_export_gold_to_volume.py
 │
 ├── docs/
+│   └── images/
+│       ├── powerbi_resumen_general.png
+│       ├── powerbi_economia.png
+│       └── powerbi_mercado_laboral.png
+│
+├── powerbi/
+│   └── españa_graficos.pbix
+│
+├── src/
+│   ├── extraction/
+│   │   └── ine_client.py
+│   ├── loading/
+│   │   ├── databricks_uploader.py
+│   │   └── databricks_downloader.py
+│   └── orchestration/
+│       └── databricks_jobs.py
 │
 ├── .gitignore
 └── README.md
@@ -1203,271 +582,153 @@ spain-economy-data-engineering/
 
 ---
 
-## Folder Responsibilities
+## ⚙️ Ejecución
 
-### `config/`
+### 1. Extracción manual
 
-Configuration shared by the project.
+Desde la raíz del proyecto:
 
-Planned contents:
-
-```text
-series.py
+```bash
+python -m src.extraction.ine_client
 ```
 
-This will contain the INE series dictionary and other extraction configuration.
-
----
-
-### `src/extraction/`
-
-Code responsible for extracting source data.
-
-Example future file:
+Los JSON se guardan en:
 
 ```text
-ine_client.py
-```
-
-Responsibilities:
-
-- Build INE API requests
-- Validate HTTP responses
-- Retrieve JSON data
-- Save raw data
-
----
-
-### `src/transformations/`
-
-Transformation logic.
-
-Examples:
-
-- CPI monthly to quarterly
-- Labour market percentages
-- Real salary
-- Real GDP per capita index
-
----
-
-### `src/utils/`
-
-Reusable utility functions that do not belong directly to extraction or transformation logic.
-
----
-
-### `data/bronze/`
-
-Raw source data.
-
-```text
-INE API JSON
+data/bronze/
 ```
 
 ---
 
-### `data/silver/`
+### 2. Configuración de Databricks
 
-Cleaned and standardized datasets.
+Las credenciales no se versionan en Git.
 
----
-
-### `data/gold/`
-
-Final analysis-ready datasets.
-
----
-
-### `airflow/dags/`
-
-Future Airflow DAG definitions.
-
----
-
-### `databricks/notebooks/`
-
-Databricks notebooks used for Spark / PySpark transformations and analysis.
-
----
-
-### `tests/`
-
-Automated tests using Pytest.
-
----
-
-### `docs/`
-
-Project documentation and context documents.
-
----
-
-## Git Strategy
-
-Git has already been initialized in the project root.
-
-Generated datasets and local files that do not belong in the repository will be excluded through `.gitignore`.
-
-Git does not track empty folders.
-
-Therefore, some project directories may not appear in GitHub until they contain actual files.
-
-This is expected and does not affect the local project structure.
-
----
-
-## Current Project Status
-
-### Research and Data Selection
-
-- [x] Main project question defined
-- [x] Study period defined
-- [x] Economic analysis blocks defined
-- [x] Official INE source selected
-- [x] INE API hierarchy understood
-- [x] Relevant INE operations identified
-- [x] Relevant INE tables identified
-- [x] Final main series identified
-- [x] Real GDP series selected
-- [x] Population series selected
-- [x] Employed population selected
-- [x] Unemployment rate selected
-- [x] Permanent employees selected
-- [x] Temporary employees selected
-- [x] Full-time employment selected
-- [x] Part-time employment selected
-- [x] Salary series selected
-- [x] CPI series selected
-
----
-
-### Methodology
-
-- [x] Nominal GDP rejected in favour of real GDP
-- [x] CPI index interpretation understood
-- [x] CPI monthly → quarterly methodology selected
-- [x] Real salary methodology defined
-- [x] Labour market percentage denominators defined
-- [x] Fixed-discontinuous contracts removed from separate analysis
-- [x] SEPE removed from the main pipeline
-- [ ] Final real GDP per capita index implementation
-- [ ] Population historical frequency treatment
-
----
-
-### Development Environment
-
-- [x] Git repository initialized
-- [x] Dedicated Conda environment created
-- [x] Environment named `economia`
-- [x] Python 3.12.13 installed
-- [x] Requests installed
-- [x] Pandas installed
-- [x] Pytest installed
-- [x] IPython Kernel installed
-- [x] VS Code configured with the `economia` environment
-- [x] Project folder structure created
-- [ ] `.gitignore` completed
-- [ ] INE series configuration created
-- [ ] First extractor implemented
-
----
-
-## Next Steps
-
-The next development steps are:
+El entorno de Airflow necesita disponer de:
 
 ```text
-1. Finish .gitignore
-        ↓
-2. Create config/series.py
-        ↓
-3. Implement one test INE request
-        ↓
-4. Save one raw JSON file in Bronze
-        ↓
-5. Generalize extraction for all series
-        ↓
-6. Validate population extraction
-        ↓
-7. Add tests
-        ↓
-8. Implement transformations
-        ↓
-9. Add Docker
-        ↓
-10. Add Airflow
-        ↓
-11. Connect Databricks
-        ↓
-12. Transform data with PySpark
-        ↓
-13. Build Silver and Gold datasets
-        ↓
-14. Connect Power BI
-        ↓
-15. Analyse results
-        ↓
-16. Write final conclusions
+DATABRICKS_HOST
+DATABRICKS_TOKEN
+```
+
+además de los identificadores de los jobs de Databricks utilizados por el DAG.
+
+> [!WARNING]
+> Nunca deben añadirse tokens, secretos o archivos `.env` al repositorio.
+
+---
+
+### 3. Arrancar Airflow
+
+Desde la raíz del proyecto:
+
+```bash
+docker compose -f ./airflow/docker-compose.yaml up -d
+```
+
+La interfaz está disponible localmente en:
+
+```text
+http://localhost:8081
+```
+
+Para detener el entorno sin borrar sus volúmenes:
+
+```bash
+docker compose -f ./airflow/docker-compose.yaml down
 ```
 
 ---
 
-## Project Principle
+### 4. Power BI
 
-This project does **not** attempt to prove a predefined political or economic conclusion.
+Airflow actualiza los CSV locales de la capa Gold.
 
-The objective is to use official data to determine whether improvements in aggregate Spanish economic indicators have also translated into improvements for the average citizen.
-
-The analysis must therefore distinguish between concepts such as:
+Power BI trabaja en **Import mode**, por lo que después de actualizar los CSV se debe utilizar:
 
 ```text
-More GDP
-≠
-Automatically better living standards
+Refresh
 ```
 
-```text
-More employment
-≠
-Automatically better employment
-```
-
-```text
-Higher nominal salary
-≠
-Automatically higher purchasing power
-```
-
-The conclusions must follow the data, even if the results contradict the initial expectations.
+en Power BI Desktop para actualizar el modelo visual.
 
 ---
 
-## Final Goal
+## 🔄 Automatización y actualización de GitHub
 
-The project should ultimately be able to answer four questions with data:
+El pipeline puede actualizar automáticamente los CSV locales, pero **GitHub no recibe los cambios automáticamente**.
 
-```text
-1. Is Spain producing more?
+Después de una nueva ejecución, los datos solo se publican en el repositorio cuando se realiza un nuevo:
 
-2. Are more people working?
-
-3. Are those jobs better?
-
-4. Can workers actually buy more?
+```bash
+git add .
+git commit -m "Update economic data"
+git push
 ```
 
-These answers will then be combined to address the main question:
-
-> **Has the Spanish economy really improved for the average citizen between 2015 and 2026?**
+Esto mantiene separado el proceso de actualización de datos del control de versiones.
 
 ---
 
-## Status
+## 📚 Qué demuestra este proyecto
 
-🚧 **Project in development**
+Este repositorio no pretende ser únicamente un dashboard.
 
-Current phase:
+Demuestra un flujo completo de trabajo de Data Engineering:
 
-**Local environment and project structure setup before implementing the INE extraction pipeline.**
+```text
+API ingestion
+      ↓
+Raw storage
+      ↓
+Data transformation
+      ↓
+Data quality / normalization
+      ↓
+Analytical metrics
+      ↓
+Workflow orchestration
+      ↓
+Data export
+      ↓
+BI modeling
+      ↓
+Business interpretation
+```
+
+Entre los conceptos aplicados se encuentran:
+
+- consumo de APIs;
+- arquitectura Medallion;
+- ETL / ELT;
+- PySpark DataFrames;
+- joins;
+- funciones Window;
+- tratamiento de diferentes granularidades temporales;
+- interpolación;
+- tablas Delta;
+- Databricks Volumes;
+- Jobs API;
+- Apache Airflow;
+- Docker Compose;
+- modelado dimensional;
+- Power BI;
+- interpretación de indicadores económicos.
+
+---
+
+## 👤 Autor
+
+**JohanStragus**
+
+Proyecto desarrollado como portfolio de **Data Engineering / Data Analytics**.
+
+[GitHub](https://github.com/JohanStragus)
+
+---
+
+## 📄 Fuente de los datos
+
+**Instituto Nacional de Estadística (INE) — España**
+
+Todos los indicadores utilizados proceden de series oficiales del INE. Las transformaciones, métricas, visualizaciones e interpretaciones del proyecto son de elaboración propia.
